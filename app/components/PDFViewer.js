@@ -28,6 +28,31 @@ const PDFViewer = ({
     setPageNumber(1);
   }, [setNumPages]);
 
+  // Calculate similarity between two strings (0 to 1)
+  const calculateSimilarity = (str1, str2) => {
+    const len1 = str1.length;
+    const len2 = str2.length;
+    const matrix = Array(len1 + 1).fill().map(() => Array(len2 + 1).fill(0));
+
+    for (let i = 0; i <= len1; i++) matrix[i][0] = i;
+    for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
+      }
+    }
+
+    const distance = matrix[len1][len2];
+    const maxLength = Math.max(len1, len2);
+    return 1 - distance / maxLength;
+  };
+
   // Function to find the bounding box for a given text match
   const findTextPositions = (pageTextItems, searchText, scaleFactor) => {
     if (!searchText || !pageTextItems || pageTextItems.length === 0) {
@@ -35,7 +60,7 @@ const PDFViewer = ({
       return [];
     }
 
-    // Normalize search text: remove extra spaces, normalize quotes and dashes
+    // Normalize search text
     const normalizedSearch = searchText.toLowerCase()
       .trim()
       .replace(/\s+/g, ' ')
@@ -43,6 +68,7 @@ const PDFViewer = ({
       .replace(/[""]/g, '"')
       .replace(/[‒–—―]/g, '-');
 
+    const SIMILARITY_THRESHOLD = 0.8; // 80% similarity threshold
     const matches = [];
     console.log('🔍 Normalized search text:', normalizedSearch);
 
@@ -51,19 +77,16 @@ const PDFViewer = ({
     let lineTexts = [];
     let currentLine = [];
     
-    // Group text items by lines with tolerance for slight y-coordinate differences
+    // Group text items by lines with tolerance
     pageTextItems.forEach((item, index) => {
-      // Skip empty or whitespace-only items
       if (!item.str.trim()) return;
 
-      // Initialize currentY if not set
       if (currentY === null) {
         currentY = item.transform[5];
       }
 
-      // Check if item is on the same line (with tolerance)
       const yDiff = Math.abs(item.transform[5] - currentY);
-      if (yDiff < 3) { // Increased tolerance for vertical alignment
+      if (yDiff < 3) {
         currentLine.push(item);
       } else {
         if (currentLine.length > 0) {
@@ -73,7 +96,6 @@ const PDFViewer = ({
         currentY = item.transform[5];
       }
       
-      // Handle last line
       if (index === pageTextItems.length - 1 && currentLine.length > 0) {
         lineTexts.push(currentLine);
       }
@@ -81,10 +103,9 @@ const PDFViewer = ({
 
     // Process each line
     lineTexts.forEach(line => {
-      // Sort items by x-coordinate to ensure correct order
       line.sort((a, b) => a.transform[4] - b.transform[4]);
 
-      // Combine text items with proper spacing
+      // Create sliding windows of text to check for matches
       const lineText = line.map(item => item.str).join('');
       const normalizedLineText = lineText.toLowerCase()
         .replace(/\s+/g, ' ')
@@ -92,53 +113,83 @@ const PDFViewer = ({
         .replace(/[""]/g, '"')
         .replace(/[‒–—―]/g, '-');
 
-      let searchIndex = 0;
-      while ((searchIndex = normalizedLineText.indexOf(normalizedSearch, searchIndex)) !== -1) {
-        let charCount = 0;
-        let startItem = null;
-        let endItem = null;
-        let startOffset = 0;
-        let endOffset = 0;
+      const searchLength = normalizedSearch.length;
+      const windowSize = Math.floor(searchLength * 1.5); // Allow for some extra characters
 
-        // Find the text items that contain the match
-        for (let i = 0; i < line.length; i++) {
-          const item = line[i];
-          const prevCharCount = charCount;
-          charCount += item.str.length;
+      for (let i = 0; i < normalizedLineText.length - searchLength + 1; i++) {
+        // Check windows of text around this position
+        for (let size = searchLength - 2; size <= windowSize; size++) {
+          if (i + size > normalizedLineText.length) break;
+          
+          const windowText = normalizedLineText.substr(i, size);
+          const similarity = calculateSimilarity(normalizedSearch, windowText);
 
-          if (!startItem && searchIndex < charCount) {
-            startItem = item;
-            startOffset = searchIndex - prevCharCount;
-          }
+          if (similarity >= SIMILARITY_THRESHOLD) {
+            console.log(`Found match with ${(similarity * 100).toFixed(1)}% similarity:`, windowText);
 
-          if (startItem && (searchIndex + normalizedSearch.length) <= charCount) {
-            endItem = item;
-            endOffset = Math.min(item.str.length, searchIndex + normalizedSearch.length - prevCharCount);
+            // Find the corresponding text items
+            let charCount = 0;
+            let startItem = null;
+            let endItem = null;
+            let startOffset = 0;
+            let endOffset = 0;
+
+            for (let j = 0; j < line.length; j++) {
+              const item = line[j];
+              const prevCharCount = charCount;
+              charCount += item.str.length;
+
+              if (!startItem && i < charCount) {
+                startItem = item;
+                startOffset = i - prevCharCount;
+              }
+
+              if (startItem && (i + size) <= charCount) {
+                endItem = item;
+                endOffset = Math.min(item.str.length, i + size - prevCharCount);
+                break;
+              }
+            }
+
+            if (startItem && endItem) {
+              const startX = startItem.transform[4] + (startOffset * (startItem.width || 0) / startItem.str.length);
+              const endX = endItem === startItem 
+                ? startItem.transform[4] + (endOffset * (startItem.width || 0) / startItem.str.length)
+                : endItem.transform[4] + (endOffset * (endItem.width || 0) / endItem.str.length);
+
+              matches.push({
+                text: windowText,
+                similarity: similarity,
+                transform: [0, 0, 0, 0, startX * scaleFactor, startItem.transform[5] * scaleFactor],
+                width: Math.max((endX - startX) * scaleFactor, 5),
+                height: Math.abs(startItem.height || 0) * scaleFactor
+              });
+            }
+
+            // Skip to end of this match to avoid overlapping matches
+            i += size - 1;
             break;
           }
         }
-
-        if (startItem && endItem) {
-          // Calculate precise positions
-          const startX = startItem.transform[4] + (startOffset * (startItem.width || 0) / startItem.str.length);
-          const endX = endItem === startItem 
-            ? startItem.transform[4] + (endOffset * (startItem.width || 0) / startItem.str.length)
-            : endItem.transform[4] + (endOffset * (endItem.width || 0) / endItem.str.length);
-
-          matches.push({
-            text: normalizedSearch,
-            transform: [0, 0, 0, 0, startX * scaleFactor, startItem.transform[5] * scaleFactor],
-            width: Math.max((endX - startX) * scaleFactor, 5), // Ensure minimum width
-            height: Math.abs(startItem.height || 0) * scaleFactor
-          });
-        }
-
-        searchIndex += normalizedSearch.length;
       }
     });
 
-    console.log(`\n🔎 Total matches found: ${matches.length}`);
-    return matches;
+    // Remove overlapping matches, keeping the ones with higher similarity
+    const filteredMatches = matches.sort((a, b) => b.similarity - a.similarity)
+      .filter((match, index, arr) => {
+        for (let i = 0; i < index; i++) {
+          const prev = arr[i];
+          const overlap = !(
+            match.transform[4] > prev.transform[4] + prev.width ||
+            match.transform[4] + match.width < prev.transform[4]
+          );
+          if (overlap) return false;
+        }
+        return true;
+      });
+
+    console.log(`\n🔎 Total matches found: ${filteredMatches.length}`);
+    return filteredMatches;
   };
 
   // Calculate scale factor after page renders

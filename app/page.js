@@ -19,6 +19,8 @@ export default function Home() {
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [query, setQuery] = useState('');
+  const [chatSessions, setChatSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -29,75 +31,31 @@ export default function Home() {
   const [highlights, setHighlights] = useState([]);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.classList.toggle('dark', isDarkMode);
-      document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
-    }
-  }, [isDarkMode, mounted]);
-
-  useEffect(() => {
-    return () => {
-      if (pdfFile) {
-        fetch('http://localhost:5000/api/cleanup', {
-          method: 'POST'
-        }).catch(console.error);
-      }
+  // Function declarations
+  const handleNewChat = () => {
+    const newSession = {
+      id: Date.now().toString(),
+      messages: []
     };
-  }, [pdfFile]);
+    setChatSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+    setChatHistory([]);
+  };
 
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    );
-  }
+  const handleSelectSession = (sessionId) => {
+    setCurrentSessionId(sessionId);
+    const session = chatSessions.find(s => s.id === sessionId);
+    setChatHistory(session ? session.messages : []);
+  };
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0];
-    console.log('File selected:', file ? {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    } : 'No file');
-
-    if (file && file.type === 'application/pdf') {
-      setIsUploading(true);
-      setError(null);
-      
-      console.log('Preparing to upload PDF file...');
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        console.log('Making API request to /api/upload...');
-        const response = await fetch('http://localhost:5000/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        console.log('Upload response status:', response.status);
-        if (!response.ok) throw new Error('Failed to upload PDF');
-
-        const data = await response.json();
-        console.log('Upload response data:', data);
-
-        setPdfFile(URL.createObjectURL(file));
-        setFileName(file.name);
-        setIsUploading(false);
-        console.log('File upload completed successfully');
-      } catch (err) {
-        console.error('Error in handleFileChange:', err);
-        setError('Failed to upload PDF: ' + err.message);
-        setIsUploading(false);
-      }
-    } else if (file) {
-      console.warn('Invalid file type:', file.type);
+  const updateChatHistory = (newHistory) => {
+    setChatHistory(newHistory);
+    if (currentSessionId) {
+      setChatSessions(prev => prev.map(session => 
+        session.id === currentSessionId 
+          ? { ...session, messages: newHistory }
+          : session
+      ));
     }
   };
 
@@ -106,7 +64,8 @@ export default function Home() {
 
     console.log('Sending query:', query);
     const newMessage = { type: 'user', content: query };
-    setChatHistory([...chatHistory, newMessage]);
+    const updatedHistory = [...chatHistory, newMessage];
+    updateChatHistory(updatedHistory);
     setQuery('');
     setIsLoading(true);
 
@@ -136,21 +95,11 @@ export default function Home() {
       };
       console.log('Formatted AI message:', aiMessage);
 
-      setChatHistory(prev => [...prev, aiMessage]);
+      updateChatHistory([...updatedHistory, aiMessage]);
       if (data?.highlightText && data?.pageNumber) {
-        console.log('Setting highlights with:', {
-          pageNumber: data?.pageNumber,
-          text: data?.highlightText
-        });
         setHighlights([{
           pageNumber: data.matches[0]?.pageNumber,
-          text: data.matches[0]?.highlightText,
-          position: {
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '30px'
-          }
+          text: data.matches[0]?.highlightText
         }]);
       }
     } catch (err) {
@@ -158,6 +107,37 @@ export default function Home() {
       setError('Failed to get answer: ' + err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      setIsUploading(true);
+      setError(null);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const response = await fetch('http://localhost:5000/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error('Failed to upload PDF');
+
+        const data = await response.json();
+        setPdfFile(URL.createObjectURL(file));
+        setFileName(file.name);
+        setIsUploading(false);
+      } catch (err) {
+        console.error('Error in handleFileChange:', err);
+        setError('Failed to upload PDF: ' + err.message);
+        setIsUploading(false);
+      }
+    } else if (file) {
+      setError('Please upload a PDF file');
     }
   };
 
@@ -181,7 +161,42 @@ export default function Home() {
 
     console.log(highlights)
   };
-  
+
+  // Effects
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      document.documentElement.classList.toggle('dark', isDarkMode);
+      document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
+    }
+  }, [isDarkMode, mounted]);
+
+  useEffect(() => {
+    if (chatSessions.length === 0) {
+      handleNewChat();
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pdfFile) {
+        fetch('http://localhost:5000/api/cleanup', {
+          method: 'POST'
+        }).catch(console.error);
+      }
+    };
+  }, [pdfFile]);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
@@ -198,11 +213,10 @@ export default function Home() {
         {/* Chat History Sidebar */}
         <ChatHistorySidebar 
           isDarkMode={isDarkMode}
-          chatHistory={chatHistory}
-          onSelectChat={(index) => {
-            // You can implement chat selection functionality here
-            console.log('Selected chat:', index);
-          }}
+          chatSessions={chatSessions}
+          currentSessionId={currentSessionId}
+          onSelectSession={handleSelectSession}
+          onNewChat={handleNewChat}
         />
 
         {/* Main Content */}
