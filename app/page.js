@@ -30,6 +30,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [highlights, setHighlights] = useState([]);
   const [mounted, setMounted] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
 
   // Function declarations
   const handleNewChat = () => {
@@ -207,6 +208,7 @@ export default function Home() {
         handleFileChange={handleFileChange}
         fileName={fileName}
         error={error}
+        setIsSidebarVisible={setIsSidebarVisible}
       />
 
       <div className="flex pt-16 h-screen">
@@ -217,6 +219,8 @@ export default function Home() {
           currentSessionId={currentSessionId}
           onSelectSession={handleSelectSession}
           onNewChat={handleNewChat}
+          isSidebarVisible={isSidebarVisible}
+          setIsSidebarVisible={setIsSidebarVisible}
         />
 
         {/* Main Content */}
