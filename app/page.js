@@ -71,7 +71,7 @@ export default function Home() {
 
     try {
       console.log('Making API request to /api/question...');
-      const response = await fetch('http://localhost:5000/api/question', {
+      const response = await fetch('http://164.52.214.201:5000/api/question', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ export default function Home() {
       formData.append('file', file);
 
       try {
-        const response = await fetch('http://localhost:5000/api/upload', {
+        const response = await fetch('http://164.52.214.201:5000/api/upload', {
           method: 'POST',
           body: formData,
         });
@@ -183,7 +183,7 @@ export default function Home() {
   useEffect(() => {
     return () => {
       if (pdfFile) {
-        fetch('http://localhost:5000/api/cleanup', {
+        fetch('http://164.52.214.201:5000/api/cleanup', {
           method: 'POST'
         }).catch(console.error);
       }
