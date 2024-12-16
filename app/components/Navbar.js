@@ -1,60 +1,42 @@
 'use client';
 
-const Navbar = ({ isDarkMode, setIsDarkMode, isUploading, handleFileChange, fileName, error, setIsSidebarVisible }) => {
+const Navbar = ({ isDarkMode, setIsDarkMode, setIsSidebarVisible }) => {
   return (
-    <div className={`fixed top-0 w-full z-50 ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm`}>
-      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-4">
-            {/* Hover trigger area */}
-            <div 
-              className="group relative"
-              onMouseEnter={() => setIsSidebarVisible(true)}
-            >
-              {/* Invisible extended hover area */}
-              <div className="absolute -left-4 -top-4 w-[300px] h-24 z-40" 
-                   onMouseEnter={() => setIsSidebarVisible(true)} />
-              
-              <div className="flex items-center gap-3">
-                <span className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'} cursor-pointer group-hover:text-indigo-600 transition-colors`}>
-                  PDF Summarizer
-                </span>
-              </div>
-            </div>
-            <label className={`relative cursor-pointer ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-              <span className={`inline-flex items-center px-3 py-1.5 rounded text-sm font-medium ${
-                isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'
-              }`}>
-                {isUploading ? 'Uploading...' : 'Upload PDF'}
-              </span>
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                disabled={isUploading}
-                className="hidden"
-              />
-            </label>
-            {fileName && (
-              <span className={`text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                {fileName}
-              </span>
-            )}
-            {error && (
-              <span className="text-sm text-red-500">
-                {error}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`p-2 rounded-lg ${isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`}
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div className="mx-auto px-4">
+        <div className="flex justify-between h-16">
+          <div 
+            className="group relative flex items-center"
+            onMouseEnter={() => setIsSidebarVisible(true)}
+            onMouseLeave={() => setIsSidebarVisible(false)}
           >
-            {isDarkMode ? '☀️' : '🌙'}
-          </button>
+            {/* Invisible extended hover area */}
+            <div className="absolute -left-4 -top-4 w-[300px] h-24 z-40" />
+            
+            <span className={`text-xl font-semibold text-gray-800 dark:text-white cursor-pointer group-hover:text-indigo-600 transition-colors`}>
+              PDF Summarizer
+            </span>
+          </div>
+
+          <div className="flex items-center">
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
+              {isDarkMode ? (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </nav>
   );
 };
 

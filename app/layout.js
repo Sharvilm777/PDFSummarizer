@@ -1,7 +1,9 @@
-import { Inter } from 'next/font/google'
+import { Inter,Montserrat,Ubuntu } from 'next/font/google'
 import "./globals.css";
 
 const inter = Inter({ subsets: ['latin'] })
+const montserrat = Montserrat({ subsets: ['latin'] })
+const ubuntu = Ubuntu({ subsets: ['latin'],display: 'swap',weight:['300','400','500','700'] })
 
 export const metadata = {
   title: 'PDF Summarizer',
@@ -14,7 +16,7 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={ubuntu.className} suppressHydrationWarning>
         <div id="root">
           {children}
         </div>

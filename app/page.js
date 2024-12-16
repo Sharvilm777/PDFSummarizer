@@ -1,296 +1,225 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { pdfjs } from 'react-pdf';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
-
+import { useState, useEffect, useRef } from 'react';
 import Message from './components/Message';
 import Navbar from './components/Navbar';
-import PDFViewer from './components/PDFViewer';
 import ChatInput from './components/ChatInput';
 import ChatHistorySidebar from './components/ChatHistorySidebar';
-
-// Configure PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+import ImageViewer from './components/ImageViewer';
+import "./scroller.css";
 
 export default function Home() {
-  const [pdfFile, setPdfFile] = useState(null);
-  const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
   const [query, setQuery] = useState('');
-  const [chatSessions, setChatSessions] = useState([]);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [fileName, setFileName] = useState('');
-  const [isPdfVisible, setIsPdfVisible] = useState(true);
-  const [isUploading, setIsUploading] = useState(false);
-  const [error, setError] = useState(null);
-  const [highlights, setHighlights] = useState([]);
-  const [mounted, setMounted] = useState(false);
+  const [isContentVisible, setIsContentVisible] = useState(true);
+  const [images, setImages] = useState([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  // Function declarations
-  const handleNewChat = () => {
-    const newSession = {
-      id: Date.now().toString(),
-      messages: []
-    };
-    setChatSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
-    setChatHistory([]);
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSelectSession = (sessionId) => {
-    setCurrentSessionId(sessionId);
-    const session = chatSessions.find(s => s.id === sessionId);
-    setChatHistory(session ? session.messages : []);
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [chatHistory]);
 
-  const updateChatHistory = (newHistory) => {
-    setChatHistory(newHistory);
-    if (currentSessionId) {
-      setChatSessions(prev => prev.map(session => 
-        session.id === currentSessionId 
-          ? { ...session, messages: newHistory }
-          : session
-      ));
+  useEffect(() => {
+    // Initialize with a new session
+    handleNewChat();
+  }, []);
+
+  const handleImageUpdate = (imageUrl) => {
+    setImages(prev => [...prev, imageUrl]);
+    setCurrentImageIndex(prev => prev + 1);
+    if (!isContentVisible) {
+      setIsContentVisible(true);
     }
   };
 
-  const handleSend = async () => {
-    if (!query.trim() || isLoading) return;
+  const handleNewChat = () => {
+    const newSession = {
+      id: Date.now().toString(),
+      name: 'New Chat'
+    };
+    setChatSessions(prev => [...prev, newSession]);
+    setCurrentSessionId(newSession.id);
+    setChatHistory([]);
+    setImages([]);
+    setCurrentImageIndex(0);
+  };
 
-    console.log('Sending query:', query);
+  const handleSelectSession = (sessionId) => {
+    if (!sessionId) return;
+    setCurrentSessionId(sessionId);
+    setChatHistory([]);
+    setImages([]);
+    setCurrentImageIndex(0);
+  };
+
+  const handleSend = async () => {
+    if (!query.trim() || !currentSessionId) return;
+
     const newMessage = { type: 'user', content: query };
     const updatedHistory = [...chatHistory, newMessage];
-    updateChatHistory(updatedHistory);
+    setChatHistory(updatedHistory);
     setQuery('');
     setIsLoading(true);
 
     try {
-      console.log('Making API request to /api/question...');
-      const response = await fetch('http://164.52.214.201:5000/api/question', {
+      const response = await fetch('http://164.52.214.201:8000/query-pdf/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: query }),
+        body: JSON.stringify({
+          question: query
+        }),
       });
 
-      console.log('API Response status:', response.status);
-      if (!response.ok) throw new Error('Failed to get answer');
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
 
       const data = await response.json();
-      console.log('API Response data:', data);
       
+      // Get all quotes from the pages
+      const allQuotes = [];
+      if (data.pages) {
+        Object.values(data.pages).forEach(page => {
+          if (page.quotes && Array.isArray(page.quotes)) {
+            allQuotes.push(...page.quotes);
+          }
+        });
+      }
+      console.log(data.pages);
+      
+      // Update chat history with AI response
       const aiMessage = {
         type: 'ai',
         content: {
-          answer: data.answer,
-          highlightText: data.matches[0]?.text,
-          pageNumber: data.matches[0]?.pageNumber
+          answer: data.response,
+          pageNumber: data.page_number,
+          highlightText: allQuotes.join('\n')
         }
       };
-      console.log('Formatted AI message:', aiMessage);
-
-      updateChatHistory([...updatedHistory, aiMessage]);
-      if (data?.highlightText && data?.pageNumber) {
-        setHighlights([{
-          pageNumber: data.matches[0]?.pageNumber,
-          text: data.matches[0]?.highlightText
-        }]);
+      
+      setChatHistory([...updatedHistory, aiMessage]);
+      
+      // Handle multiple highlighted images
+      if (data.pages) {
+        Object.values(data.pages).forEach(page => {
+          if (page.highlighted_image) {
+            const imageUrl = `data:image/png;base64,${page.highlighted_image}`;
+            setImages(prevImages => [...prevImages, imageUrl]);
+            // Set current index to the newly added image
+            setCurrentImageIndex(images.length);
+          }
+        });
       }
-    } catch (err) {
-      console.error('Error in handleSend:', err);
-      setError('Failed to get answer: ' + err.message);
+      
+      // Update sessions if needed
+      if (data.sessions) {
+        setChatSessions(data.sessions);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setChatHistory([
+        ...updatedHistory,
+        { 
+          type: 'ai', 
+          content: { 
+            answer: 'Sorry, there was an error processing your request.' 
+          } 
+        }
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      setIsUploading(true);
-      setError(null);
-      
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        const response = await fetch('http://164.52.214.201:5000/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) throw new Error('Failed to upload PDF');
-
-        const data = await response.json();
-        setPdfFile(URL.createObjectURL(file));
-        setFileName(file.name);
-        setIsUploading(false);
-      } catch (err) {
-        console.error('Error in handleFileChange:', err);
-        setError('Failed to upload PDF: ' + err.message);
-        setIsUploading(false);
-      }
-    } else if (file) {
-      setError('Please upload a PDF file');
-    }
-  };
-
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleAddHighlight = (pageNumber, text) => {
-
-    setHighlights((prev) => [
-      ...prev,
-      {
-        pageNumber,
-        text,
-        position: null, // Optional: You can calculate or provide specific position details if needed.
-      },
-    ]);
-
-    console.log(highlights)
-  };
-
-  // Effects
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.classList.toggle('dark', isDarkMode);
-      document.documentElement.style.colorScheme = isDarkMode ? 'dark' : 'light';
-    }
-  }, [isDarkMode, mounted]);
-
-  useEffect(() => {
-    if (chatSessions.length === 0) {
-      handleNewChat();
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (pdfFile) {
-        fetch('http://164.52.214.201:5000/api/cleanup', {
-          method: 'POST'
-        }).catch(console.error);
-      }
-    };
-  }, [pdfFile]);
-
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
-      <Navbar 
+    <div className="flex h-screen bg-white dark:bg-gray-900">
+      <ChatHistorySidebar 
         isDarkMode={isDarkMode}
-        setIsDarkMode={setIsDarkMode}
-        isUploading={isUploading}
-        handleFileChange={handleFileChange}
-        fileName={fileName}
-        error={error}
+        chatSessions={chatSessions}
+        currentSessionId={currentSessionId}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+        isSidebarVisible={isSidebarVisible}
         setIsSidebarVisible={setIsSidebarVisible}
       />
 
-      <div className="flex pt-16 h-screen">
-        {/* Chat History Sidebar */}
-        <ChatHistorySidebar 
+      <div className="flex-1 flex flex-col">
+        <Navbar 
           isDarkMode={isDarkMode}
-          chatSessions={chatSessions}
-          currentSessionId={currentSessionId}
-          onSelectSession={handleSelectSession}
-          onNewChat={handleNewChat}
-          isSidebarVisible={isSidebarVisible}
+          setIsDarkMode={setIsDarkMode}
           setIsSidebarVisible={setIsSidebarVisible}
         />
 
-        {/* Main Content */}
-        <div className="flex-1 flex">
-          {/* Left Section - Chat Interface */}
-          <div className={`${isPdfVisible ? 'w-1/2' : 'w-full'} transition-all duration-300 ${isDarkMode ? 'bg-gray-900' : 'bg-gray-50'} flex flex-col relative`}>
-            {/* Toggle PDF Button */}
-            <button
-              onClick={() => setIsPdfVisible(!isPdfVisible)}
-              className={`absolute right-4 top-4 p-2 rounded-full ${isDarkMode ? 'bg-gray-800 hover:bg-gray-700' : 'bg-white hover:bg-gray-100'} shadow-lg z-10`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {isPdfVisible ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                )}
-              </svg>
-            </button>
-
-            {/* Chat Section */}
-            <div className="flex-1 overflow-auto p-4 space-y-3">
-              {error && (
-                <div className={`p-3 rounded ${isDarkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-50 text-red-500'}`}>
-                  {error}
-                </div>
-              )}
-              {chatHistory.map((message, index) => (
+        <div className="flex-1 flex overflow-hidden pt-16 relative">
+          {/* Chat Messages Section */}
+          <div className={`flex flex-col ${isContentVisible ? 'w-1/2' : 'w-full'} transition-all duration-300`}>
+            <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+              {chatHistory && chatHistory.map((message, index) => (
                 <Message 
-                  key={index} 
-                  message={message} 
+                  key={index}
+                  message={message}
                   isDarkMode={isDarkMode}
-                  setIsPdfVisible={setIsPdfVisible}
-                  onAddHighlight={handleAddHighlight}
                 />
               ))}
               {isLoading && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 flex-shrink-0 flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div>
-                  </div>
-                  <div className="flex-1 p-2 rounded bg-gray-50">
-                    <div className="animate-pulse flex space-x-1">
-                      <div className="h-1.5 w-1.5 rounded-full bg-gray-300"></div>
-                      <div className="h-1.5 w-1.5 rounded-full bg-gray-300"></div>
-                      <div className="h-1.5 w-1.5 rounded-full bg-gray-300"></div>
-                    </div>
-                  </div>
+                <div className="flex justify-center items-center p-4">
+                  <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
-            <ChatInput 
-              isDarkMode={isDarkMode}
-              pdfFile={pdfFile}
-              query={query}
-              setQuery={setQuery}
-              handleKeyPress={handleKeyPress}
-              handleSend={handleSend}
-              isLoading={isLoading}
-            />
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+              <ChatInput 
+                query={query}
+                setQuery={setQuery}
+                handleSend={handleSend}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
-              
-          <PDFViewer 
-            pdfFile={pdfFile}
-            isPdfVisible={isPdfVisible}
-            isDarkMode={isDarkMode}
-            setNumPages={setNumPages}
-            highlights={highlights}
-          />
+
+          {/* Image Display Section */}
+          <div className={`${isContentVisible ? 'w-1/2' : 'w-0'} transition-all duration-300 relative h-[calc(100vh-4rem)]`}>
+            {/* Toggle Button for Image Section */}
+            <button
+              onClick={() => setIsContentVisible(!isContentVisible)}
+              className={`absolute -left-10 top-2 z-10 p-2 rounded-full shadow-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-300 hover:scale-110`}
+            >
+              <svg 
+                className={`w-5 h-5 text-gray-600 dark:text-gray-200 transform transition-transform duration-300 ${
+                  isContentVisible ? 'rotate-0' : 'rotate-180'
+                }`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+
+            {isContentVisible && (
+              <div className="absolute inset-0 border-l border-gray-200 dark:border-gray-700">
+                <ImageViewer 
+                  images={images}
+                  currentIndex={currentImageIndex}
+                  setCurrentIndex={setCurrentImageIndex}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

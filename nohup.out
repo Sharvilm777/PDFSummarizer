@@ -1,0 +1,40 @@
+
+> perplexity_clone@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.18
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1145ms
+
+> perplexity_clone@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.18
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1381ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1573ms (497 modules)
+ GET / 200 in 1909ms
+ ✓ Compiled in 303ms (244 modules)
+ ✓ Compiled /favicon.ico in 186ms (284 modules)
+ GET /favicon.ico 200 in 234ms
+ GET /favicon.ico 200 in 8ms
+ GET / 200 in 64ms
+
+> perplexity_clone@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.18
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1187ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1155ms (508 modules)
+ GET / 200 in 1400ms
+ ✓ Compiled in 197ms (251 modules)
+ GET / 200 in 21ms
